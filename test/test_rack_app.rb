@@ -8,7 +8,7 @@ class TestRackApp < Minitest::Test
   end
 
   def app
-    @app ||= McpServer::RackApp.new
+    McpServer::RackApp
   end
 
   def test_requires_post_method
@@ -25,8 +25,7 @@ class TestRackApp < Minitest::Test
       config.authenticate_with = lambda { |_request| false }
     end
 
-    test_app = McpServer::RackApp.new
-    request = Rack::MockRequest.new(test_app)
+    request = Rack::MockRequest.new(McpServer::RackApp)
 
     mcp_request = {
       jsonrpc: "2.0",
@@ -117,8 +116,7 @@ class TestRackApp < Minitest::Test
       config.tools = [test_tool_class]
     end
 
-    test_app = McpServer::RackApp.new
-    request = Rack::MockRequest.new(test_app)
+    request = Rack::MockRequest.new(McpServer::RackApp)
 
     list_request = {
       jsonrpc: "2.0",
@@ -169,8 +167,7 @@ class TestRackApp < Minitest::Test
       config.tools = [test_tool_class]
     end
 
-    test_app = McpServer::RackApp.new
-    request = Rack::MockRequest.new(test_app)
+    request = Rack::MockRequest.new(McpServer::RackApp)
 
     tool_call = {
       jsonrpc: "2.0",
@@ -231,8 +228,7 @@ class TestRackApp < Minitest::Test
       config.prompts = [test_prompt_class]
     end
 
-    test_app = McpServer::RackApp.new
-    request = Rack::MockRequest.new(test_app)
+    request = Rack::MockRequest.new(McpServer::RackApp)
 
     list_request = {
       jsonrpc: "2.0",
@@ -266,8 +262,7 @@ class TestRackApp < Minitest::Test
       config.resources = [test_resource]
     end
 
-    test_app = McpServer::RackApp.new
-    request = Rack::MockRequest.new(test_app)
+    request = Rack::MockRequest.new(McpServer::RackApp)
 
     list_request = {
       jsonrpc: "2.0",
