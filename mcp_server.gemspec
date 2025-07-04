@@ -5,10 +5,14 @@ Gem::Specification.new do |spec|
   spec.authors = ["Your Name"]
   spec.email = ["you@example.com"]
   spec.files = Dir["lib/**/*.rb"]
-  spec.required_ruby_version = ">= 2.6.0"
+  spec.required_ruby_version = ">= 3.2.0"
   spec.homepage = "http://your-gem-homepage"
   spec.license = "MIT"
 
   spec.add_dependency "rack", "~> 2.0"
   spec.add_dependency "mcp", "~> 0.1"
+
+  spec.add_development_dependency "minitest", "~> 5.0"
+  spec.add_development_dependency "rake", "~> 13.0"
+  spec.add_development_dependency "standard", "~> 1.0"
 end
