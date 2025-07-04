@@ -12,6 +12,7 @@ GEM
     mcp (0.1.0)
       json_rpc_handler (~> 0.1)
     rack (2.2.17)
+    rake (13.3.0)
 
 PLATFORMS
   arm64-darwin-23
@@ -20,6 +21,7 @@ PLATFORMS
 DEPENDENCIES
   mcp (~> 0.1)
   mcp_server!
+  rake (~> 13.3)
 
 BUNDLED WITH
    2.5.11
