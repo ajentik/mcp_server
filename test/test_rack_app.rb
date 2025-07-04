@@ -145,7 +145,6 @@ class TestRackApp < Minitest::Test
     test_tool_class = Class.new(MCP::Tool) do
       tool_name "context_test"
       description "Test tool to verify context"
-      input_schema(properties: {}, required: [])
 
       define_singleton_method(:call) do |server_context:|
         context_received = server_context
@@ -283,6 +282,84 @@ class TestRackApp < Minitest::Test
     assert_equal 1, body["result"]["resources"].length
     assert_equal "test://resource1", body["result"]["resources"][0]["uri"]
     assert_equal "Test Resource", body["result"]["resources"][0]["name"]
+  end
+
+  def test_with_resources_read_handler
+    test_resource = MCP::Resource.new(
+      uri: "test://resource1",
+      name: "Test Resource",
+      description: "A test resource",
+      mime_type: "text/plain"
+    )
+
+    read_handler = lambda do |params|
+      [{
+        uri: params[:uri],
+        mimeType: "text/plain",
+        text: "Resource content for #{params[:uri]}"
+      }]
+    end
+
+    McpServer.configure do |config|
+      config.resources = [test_resource]
+      config.resources_read_handler = read_handler
+    end
+
+    request = Rack::MockRequest.new(McpServer::RackApp)
+
+    read_request = {
+      jsonrpc: "2.0",
+      method: "resources/read",
+      params: {
+        uri: "test://resource1"
+      },
+      id: 8
+    }
+
+    response = request.post("/",
+      :input => read_request.to_json,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 200, response.status
+    body = JSON.parse(response.body)
+    assert_equal "2.0", body["jsonrpc"]
+    assert_equal 8, body["id"]
+    assert body["result"]["contents"]
+    assert_equal 1, body["result"]["contents"].length
+    assert_equal "test://resource1", body["result"]["contents"][0]["uri"]
+    assert_equal "Resource content for test://resource1", body["result"]["contents"][0]["text"]
+  end
+
+  def test_with_transport_configuration
+    transport_class = Class.new do
+      attr_reader :server
+
+      def initialize(server)
+        @server = server
+      end
+    end
+
+    McpServer.configure do |config|
+      config.transport = transport_class
+    end
+
+    request = Rack::MockRequest.new(McpServer::RackApp)
+
+    mcp_request = {
+      jsonrpc: "2.0",
+      method: "initialize",
+      params: {},
+      id: 7
+    }
+
+    response = request.post("/",
+      :input => mcp_request.to_json,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 200, response.status
+    body = JSON.parse(response.body)
+    assert_equal "2.0", body["jsonrpc"]
+    assert_equal 7, body["id"]
   end
 
   def test_error_handling

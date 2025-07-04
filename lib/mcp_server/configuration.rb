@@ -1,6 +1,6 @@
 module McpServer
   class Configuration
-    attr_accessor :authenticate_with, :build_context_with, :tools, :prompts, :resources
+    attr_accessor :authenticate_with, :build_context_with, :tools, :prompts, :resources, :resources_read_handler, :transport
 
     def initialize
       @authenticate_with = nil
@@ -8,6 +8,8 @@ module McpServer
       @tools = []
       @prompts = []
       @resources = []
+      @resources_read_handler = nil
+      @transport = nil
     end
   end
 end

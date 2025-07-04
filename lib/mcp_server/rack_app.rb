@@ -28,6 +28,18 @@ module McpServer
           server_context: server_context
         )
 
+        if config.resources_read_handler
+          mcp_server.resources_read_handler(&config.resources_read_handler)
+        end
+
+        if config.transport
+          begin
+            mcp_server.transport = config.transport.new(mcp_server)
+          rescue NoMethodError
+            # Transport setter might not be available in this version
+          end
+        end
+
         response = mcp_server.handle_json(request.body.read)
 
         [200, {"Content-Type" => "application/json"}, [response]]
