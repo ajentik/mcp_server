@@ -28,19 +28,20 @@ module McpServer
           mcp_server.resources_read_handler(&config.resources_read_handler)
         end
 
+        response = nil
         if config.transport
           begin
             mcp_server.transport = config.transport.new(mcp_server)
+            response = mcp_server.transport.handle_request(request)
           rescue NoMethodError
-            # Transport setter might not be available in this version
+            # For version 0.1.0 and earlier, mcp_server.transport is not defined
+            request.body.rewind if request.body.respond_to?(:rewind)
+            json_response = mcp_server.handle_json(request.body.read)
+            response = [200, {"Content-Type" => "application/json"}, [json_response.to_json]]
           end
         end
 
-        response = mcp_server.handle_json(request.body.read)
-
-        [200, {"Content-Type" => "application/json"}, [response]]
-      rescue => e
-        [500, {"Content-Type" => "application/json"}, [{error: e.message}.to_json]]
+        response
       end
 
       private
