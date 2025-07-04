@@ -91,6 +91,22 @@ MCPServer.configure do |config|
   config.tools = [CalculatorTool]
   config.prompts = []  # Add your MCP::Prompt classes here
   config.resources = [] # Add your MCP::Resource instances here
+
+  # Refer to https://github.com/modelcontextprotocol/ruby-sdk?tab=readme-ov-file#resources
+  # for more details on how to define resources
+  config.resources_read_handler do |request_params|
+    # Handle resource read requests
+    resource = Resource.find_by_id(request_params['id'])
+    [{
+      uri: request_params[:uri],
+      mimeType: 'application/json',
+      text: resource.to_json
+    }]
+  end
+
+  # Only when using the MCP gem's version after commit hash 382ae13
+  # https://github.com/modelcontextprotocol/ruby-sdk/commit/382ae13e25ba095fbe227b186b3287c3c7eb7ff4
+  config.transport = MCP::Server::Transports::StdioTransport
 end
 ```
 

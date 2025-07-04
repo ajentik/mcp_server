@@ -34,4 +34,16 @@ class TestConfiguration < Minitest::Test
     @config.resources = [resource]
     assert_equal [resource], @config.resources
   end
+
+  def test_resources_read_handler_set
+    handler = ->(params) { [{uri: params[:uri], text: "test"}] }
+    @config.resources_read_handler = handler
+    assert_equal handler, @config.resources_read_handler
+  end
+
+  def test_transport_set
+    transport_class = Class.new
+    @config.transport = transport_class
+    assert_equal transport_class, @config.transport
+  end
 end

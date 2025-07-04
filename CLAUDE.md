@@ -10,9 +10,9 @@ This is a Ruby gem called `mcp_server` that provides a configurable Rack-based M
 ### Testing
 ```bash
 # Run all tests
-rake test
+bundle exec rake test
 # or simply
-rake
+bundle exec rake
 
 # Run a specific test file
 ruby -Ilib:test test/test_configuration.rb
