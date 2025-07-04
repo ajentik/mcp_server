@@ -11,13 +11,121 @@ class TestRackApp < Minitest::Test
     McpServer::RackApp
   end
 
-  def test_requires_post_method
+  def test_allows_get_method
     request = Rack::MockRequest.new(app)
     response = request.get("/")
 
-    assert_equal 405, response.status
+    # GET requests are now allowed, but will likely return an error due to empty body
+    assert_equal 200, response.status
     body = JSON.parse(response.body)
-    assert_equal "Method not allowed", body["error"]
+    assert body["error"]
+  end
+
+  def test_allows_put_method
+    request = Rack::MockRequest.new(app)
+    mcp_request = {
+      jsonrpc: "2.0",
+      method: "ping",
+      params: {},
+      id: 1
+    }.to_json
+
+    response = request.put("/",
+      :input => mcp_request,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 200, response.status
+    body = JSON.parse(response.body)
+    assert_equal "2.0", body["jsonrpc"]
+    assert_equal 1, body["id"]
+  end
+
+  def test_handles_empty_body_gracefully
+    request = Rack::MockRequest.new(app)
+    response = request.post("/", :input => "")
+
+    assert_equal 200, response.status
+    body = JSON.parse(response.body)
+    assert body["error"]
+  end
+
+  def test_handles_different_content_types
+    request = Rack::MockRequest.new(app)
+    mcp_request = {
+      jsonrpc: "2.0",
+      method: "ping",
+      params: {},
+      id: 2
+    }.to_json
+
+    response = request.post("/",
+      :input => mcp_request,
+      "CONTENT_TYPE" => "text/plain")
+
+    assert_equal 200, response.status
+    body = JSON.parse(response.body)
+    assert_equal "2.0", body["jsonrpc"]
+    assert_equal 2, body["id"]
+  end
+
+  def test_patch_method_works
+    request = Rack::MockRequest.new(app)
+    mcp_request = {
+      jsonrpc: "2.0",
+      method: "initialize",
+      params: {},
+      id: 3
+    }.to_json
+
+    response = request.patch("/",
+      :input => mcp_request,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 200, response.status
+    body = JSON.parse(response.body)
+    assert_equal "2.0", body["jsonrpc"]
+    assert_equal 3, body["id"]
+    assert body["result"]
+  end
+
+  def test_context_includes_request_method
+    context_received = nil
+
+    test_tool_class = Class.new(MCP::Tool) do
+      tool_name "method_test"
+      description "Test tool to verify request method in context"
+
+      define_singleton_method(:call) do |server_context:|
+        context_received = server_context
+        MCP::Tool::Response.new(
+          content: [MCP::Content.text("Method received")]
+        )
+      end
+    end
+
+    McpServer.configure do |config|
+      config.tools = [test_tool_class]
+    end
+
+    request = Rack::MockRequest.new(McpServer::RackApp)
+
+    tool_call = {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "method_test",
+        arguments: {}
+      },
+      id: 4
+    }
+
+    response = request.delete("/",
+      :input => tool_call.to_json,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 200, response.status
+    assert context_received[:request], "Context should include request"
+    assert_equal "DELETE", context_received[:request].request_method
   end
 
   def test_authentication_failure

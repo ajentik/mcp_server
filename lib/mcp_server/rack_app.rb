@@ -13,10 +13,6 @@ module McpServer
           return [401, {"Content-Type" => "application/json"}, [{error: "Unauthorized"}.to_json]]
         end
 
-        unless request.post?
-          return [405, {"Content-Type" => "application/json"}, [{error: "Method not allowed"}.to_json]]
-        end
-
         server_context = build_server_context(request, config)
 
         mcp_server = MCP::Server.new(
