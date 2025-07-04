@@ -11,4 +11,8 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "rack", "~> 2.0"
   spec.add_dependency "mcp", "~> 0.1"
+
+  spec.add_development_dependency "minitest", "~> 5.0"
+  spec.add_development_dependency "rake", "~> 13.0"
+  spec.add_development_dependency "standard", "~> 1.0"
 end
