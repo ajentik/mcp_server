@@ -101,7 +101,7 @@ end
 Add to your `config/routes.rb`:
 
 ```ruby
-mount MCPServer::RackApp.new => '/mcp'
+mount MCPServer::RackApp => '/mcp'
 ```
 
 #### In a Sinatra application
@@ -122,7 +122,7 @@ require 'mcp_server'
 
 # Configure MCPServer...
 
-run MCPServer::RackApp.new
+run MCPServer::RackApp
 ```
 
 ## Development
