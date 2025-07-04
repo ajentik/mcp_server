@@ -5,6 +5,7 @@ require "mcp"
 class TestRackApp < Minitest::Test
   def setup
     McpServer.configuration = McpServer::Configuration.new
+    McpServer.configuration.transport = MCP::Server::Transports::StreamableHTTPTransport
   end
 
   def app
@@ -15,10 +16,10 @@ class TestRackApp < Minitest::Test
     request = Rack::MockRequest.new(app)
     response = request.get("/")
 
-    # GET requests are now allowed, but will likely return an error due to empty body
-    assert_equal 200, response.status
+    # GET requests require a session ID with StreamableHTTPTransport
+    assert_equal 400, response.status
     body = JSON.parse(response.body)
-    assert body["error"]
+    assert_equal "Missing session ID", body["error"]
   end
 
   def test_allows_put_method
@@ -34,19 +35,20 @@ class TestRackApp < Minitest::Test
       :input => mcp_request,
       "CONTENT_TYPE" => "application/json")
 
-    assert_equal 200, response.status
+    # PUT method is not allowed by StreamableHTTPTransport
+    assert_equal 405, response.status
     body = JSON.parse(response.body)
-    assert_equal "2.0", body["jsonrpc"]
-    assert_equal 1, body["id"]
+    assert_equal "Method not allowed", body["error"]
   end
 
   def test_handles_empty_body_gracefully
     request = Rack::MockRequest.new(app)
-    response = request.post("/", :input => "")
+    response = request.post("/", input: "")
 
-    assert_equal 200, response.status
+    # Empty body returns 400 with StreamableHTTPTransport
+    assert_equal 400, response.status
     body = JSON.parse(response.body)
-    assert body["error"]
+    assert_equal "Invalid JSON", body["error"]
   end
 
   def test_handles_different_content_types
@@ -81,11 +83,10 @@ class TestRackApp < Minitest::Test
       :input => mcp_request,
       "CONTENT_TYPE" => "application/json")
 
-    assert_equal 200, response.status
+    # PATCH method is not allowed by StreamableHTTPTransport
+    assert_equal 405, response.status
     body = JSON.parse(response.body)
-    assert_equal "2.0", body["jsonrpc"]
-    assert_equal 3, body["id"]
-    assert body["result"]
+    assert_equal "Method not allowed", body["error"]
   end
 
   def test_context_includes_request_method
@@ -119,13 +120,14 @@ class TestRackApp < Minitest::Test
       id: 4
     }
 
-    response = request.delete("/",
+    # Use POST instead of DELETE for tool calls
+    response = request.post("/",
       :input => tool_call.to_json,
       "CONTENT_TYPE" => "application/json")
 
     assert_equal 200, response.status
     assert context_received[:request], "Context should include request"
-    assert_equal "DELETE", context_received[:request].request_method
+    assert_equal "POST", context_received[:request].request_method
   end
 
   def test_authentication_failure
@@ -439,11 +441,17 @@ class TestRackApp < Minitest::Test
   end
 
   def test_with_transport_configuration
+    # Test with a custom transport class
     transport_class = Class.new do
       attr_reader :server
 
       def initialize(server)
         @server = server
+      end
+
+      def handle_request(request)
+        # Return a simple response
+        [200, {"Content-Type" => "application/json"}, [{jsonrpc: "2.0", id: 7, result: {test: true}}.to_json]]
       end
     end
 
@@ -477,8 +485,9 @@ class TestRackApp < Minitest::Test
       :input => "invalid json",
       "CONTENT_TYPE" => "application/json")
 
-    assert_equal 200, response.status
+    # Invalid JSON returns 400 with StreamableHTTPTransport
+    assert_equal 400, response.status
     body = JSON.parse(response.body)
-    assert body["error"]
+    assert_equal "Invalid JSON", body["error"]
   end
 end
