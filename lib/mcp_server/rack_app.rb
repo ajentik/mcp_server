@@ -18,9 +18,9 @@ module McpServer
         mcp_server = MCP::Server.new(
           name: "mcp_server",
           version: "0.1.0",
-          tools: config.tools || [],
-          prompts: config.prompts || [],
-          resources: config.resources || [],
+          tools: config.tools&.call || [],
+          prompts: config.prompts&.call || [],
+          resources: config.resources&.call || [],
           server_context: server_context
         )
 
@@ -32,13 +32,39 @@ module McpServer
         if config.transport
           begin
             mcp_server.transport = config.transport.new(mcp_server)
-            response = mcp_server.transport.handle_request(request)
-          rescue NoMethodError
+            status, headers, body = mcp_server.transport.handle_request(request)
+
+            body = if body.nil?
+              []
+            elsif body.is_a?(String)
+              [body]
+            elsif body.is_a?(Array)
+              body.compact
+            elsif body.is_a?(Hash)
+              [body.to_json]
+            else
+              [body.to_s]
+            end
+
+            response = [status, headers, body]
+          rescue NoMethodError => e
             # For version 0.1.0 and earlier, mcp_server.transport is not defined
+            Rails.logger.error("MCP RackApp: NoMethodError - #{e.message}") if defined?(Rails)
             request.body.rewind if request.body.respond_to?(:rewind)
             json_response = mcp_server.handle_json(request.body.read)
             response = [200, {"Content-Type" => "application/json"}, [json_response.to_json]]
+          rescue => e
+            Rails.logger.error("MCP RackApp: Error - #{e.class}: #{e.message}") if defined?(Rails)
+            response = [500, {"Content-Type" => "application/json"}, [{error: "Internal server error: #{e.message}"}.to_json]]
           end
+        end
+
+        # Ensure response is never nil
+        response ||= [500, {"Content-Type" => "application/json"}, [{error: "Internal server error"}.to_json]]
+
+        if config.response_handler
+          handled_response = config.response_handler.call(response, request)
+          response = handled_response if handled_response
         end
 
         response
