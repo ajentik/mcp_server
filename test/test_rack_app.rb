@@ -676,7 +676,7 @@ class TestRackApp < Minitest::Test
 
     response = request.post("/", input: '{"jsonrpc":"2.0","method":"ping","id":8}')
     assert_equal 200, response.status
-    assert_equal '{:result=>"object body"}', response.body
+    assert_equal '{"result":"object body"}', response.body
   end
 
   def test_legacy_mcp_server_compatibility
@@ -684,7 +684,6 @@ class TestRackApp < Minitest::Test
       def initialize(server)
         @server = server
       end
-
     end
 
     McpServer.configure do |config|

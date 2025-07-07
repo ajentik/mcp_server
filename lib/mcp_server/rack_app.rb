@@ -40,6 +40,8 @@ module McpServer
               [body]
             elsif body.is_a?(Array)
               body.compact
+            elsif body.is_a?(Hash)
+              [body.to_json]
             else
               [body.to_s]
             end

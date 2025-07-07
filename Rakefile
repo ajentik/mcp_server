@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "rake/testtask"
+require "standard/rake"
 
 Rake::TestTask.new(:test) do |t|
   t.libs << "test"
@@ -10,4 +11,10 @@ Rake::TestTask.new(:test) do |t|
 end
 
 desc "Run tests"
-task default: :test
+task default: [:lint, :test]
+
+desc "Run standardrb with auto-fix"
+task :lint do
+  require "standard"
+  Standard::Cli.new(["--fix"]).run
+end
