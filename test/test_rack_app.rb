@@ -16,7 +16,6 @@ class TestRackApp < Minitest::Test
     request = Rack::MockRequest.new(app)
     response = request.get("/")
 
-    # GET requests require a session ID with StreamableHTTPTransport
     assert_equal 400, response.status
     body = JSON.parse(response.body)
     assert_equal "Missing session ID", body["error"]
@@ -35,7 +34,6 @@ class TestRackApp < Minitest::Test
       :input => mcp_request,
       "CONTENT_TYPE" => "application/json")
 
-    # PUT method is not allowed by StreamableHTTPTransport
     assert_equal 405, response.status
     body = JSON.parse(response.body)
     assert_equal "Method not allowed", body["error"]
@@ -45,7 +43,6 @@ class TestRackApp < Minitest::Test
     request = Rack::MockRequest.new(app)
     response = request.post("/", input: "")
 
-    # Empty body returns 400 with StreamableHTTPTransport
     assert_equal 400, response.status
     body = JSON.parse(response.body)
     assert_equal "Invalid JSON", body["error"]
@@ -83,7 +80,6 @@ class TestRackApp < Minitest::Test
       :input => mcp_request,
       "CONTENT_TYPE" => "application/json")
 
-    # PATCH method is not allowed by StreamableHTTPTransport
     assert_equal 405, response.status
     body = JSON.parse(response.body)
     assert_equal "Method not allowed", body["error"]
@@ -105,7 +101,7 @@ class TestRackApp < Minitest::Test
     end
 
     McpServer.configure do |config|
-      config.tools = [test_tool_class]
+      config.tools = -> { [test_tool_class] }
     end
 
     request = Rack::MockRequest.new(McpServer::RackApp)
@@ -120,7 +116,6 @@ class TestRackApp < Minitest::Test
       id: 4
     }
 
-    # Use POST instead of DELETE for tool calls
     response = request.post("/",
       :input => tool_call.to_json,
       "CONTENT_TYPE" => "application/json")
@@ -161,7 +156,11 @@ class TestRackApp < Minitest::Test
       method: "initialize",
       params: {
         protocolVersion: "0.1.0",
-        capabilities: {}
+        capabilities: {},
+        clientInfo: {
+          name: "test_client",
+          version: "1.0.0"
+        }
       },
       id: 1
     }
@@ -223,7 +222,7 @@ class TestRackApp < Minitest::Test
     end
 
     McpServer.configure do |config|
-      config.tools = [test_tool_class]
+      config.tools = -> { [test_tool_class] }
     end
 
     request = Rack::MockRequest.new(McpServer::RackApp)
@@ -273,7 +272,7 @@ class TestRackApp < Minitest::Test
           custom_data: "test"
         }
       }
-      config.tools = [test_tool_class]
+      config.tools = -> { [test_tool_class] }
     end
 
     request = Rack::MockRequest.new(McpServer::RackApp)
@@ -334,7 +333,7 @@ class TestRackApp < Minitest::Test
     end
 
     McpServer.configure do |config|
-      config.prompts = [test_prompt_class]
+      config.prompts = -> { [test_prompt_class] }
     end
 
     request = Rack::MockRequest.new(McpServer::RackApp)
@@ -368,7 +367,7 @@ class TestRackApp < Minitest::Test
     )
 
     McpServer.configure do |config|
-      config.resources = [test_resource]
+      config.resources = -> { [test_resource] }
     end
 
     request = Rack::MockRequest.new(McpServer::RackApp)
@@ -411,7 +410,7 @@ class TestRackApp < Minitest::Test
     end
 
     McpServer.configure do |config|
-      config.resources = [test_resource]
+      config.resources = -> { [test_resource] }
       config.resources_read_handler = read_handler
     end
 
@@ -441,7 +440,6 @@ class TestRackApp < Minitest::Test
   end
 
   def test_with_transport_configuration
-    # Test with a custom transport class
     transport_class = Class.new do
       attr_reader :server
 
@@ -450,7 +448,6 @@ class TestRackApp < Minitest::Test
       end
 
       def handle_request(request)
-        # Return a simple response
         [200, {"Content-Type" => "application/json"}, [{jsonrpc: "2.0", id: 7, result: {test: true}}.to_json]]
       end
     end
@@ -485,9 +482,358 @@ class TestRackApp < Minitest::Test
       :input => "invalid json",
       "CONTENT_TYPE" => "application/json")
 
-    # Invalid JSON returns 400 with StreamableHTTPTransport
     assert_equal 400, response.status
     body = JSON.parse(response.body)
     assert_equal "Invalid JSON", body["error"]
+  end
+
+  def test_authentication_success_with_custom_logic
+    authenticated_user = nil
+
+    McpServer.configure do |config|
+      config.authenticate_with = lambda { |request|
+        token = request.env["HTTP_AUTHORIZATION"]
+        if token == "Bearer valid_token"
+          authenticated_user = {id: 123, name: "Test User"}
+          true
+        else
+          false
+        end
+      }
+    end
+
+    request = Rack::MockRequest.new(app)
+
+    mcp_request = {
+      jsonrpc: "2.0",
+      method: "ping",
+      params: {},
+      id: 1
+    }.to_json
+
+    response = request.post("/",
+      :input => mcp_request,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 401, response.status
+
+    response = request.post("/",
+      :input => mcp_request,
+      "CONTENT_TYPE" => "application/json",
+      "HTTP_AUTHORIZATION" => "Bearer valid_token")
+
+    assert_equal 200, response.status
+    assert_equal({id: 123, name: "Test User"}, authenticated_user)
+  end
+
+  def test_response_handler_modifies_response
+    response_handler_called = false
+
+    McpServer.configure do |config|
+      config.response_handler = lambda { |response, request|
+        response_handler_called = true
+
+        status, headers, body = response
+        headers["X-Custom-Header"] = "Modified"
+        headers["X-Request-Path"] = request.path
+
+        if body.is_a?(Array) && body.first
+          modified_body = JSON.parse(body.first)
+          modified_body["custom_wrapper"] = true
+          body = [modified_body.to_json]
+        end
+
+        [status, headers, body]
+      }
+    end
+
+    request = Rack::MockRequest.new(app)
+
+    mcp_request = {
+      jsonrpc: "2.0",
+      method: "ping",
+      params: {},
+      id: 2
+    }.to_json
+
+    response = request.post("/test-path",
+      :input => mcp_request,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 200, response.status
+    assert response_handler_called
+    assert_equal "Modified", response.headers["X-Custom-Header"]
+    assert_equal "/test-path", response.headers["X-Request-Path"]
+
+    body = JSON.parse(response.body)
+    assert body["custom_wrapper"]
+    assert_equal "2.0", body["jsonrpc"]
+  end
+
+  def test_transport_error_handling
+    error_transport = Class.new do
+      def initialize(server)
+        @server = server
+      end
+
+      def handle_request(request)
+        raise StandardError, "Transport error occurred"
+      end
+    end
+
+    McpServer.configure do |config|
+      config.transport = error_transport
+    end
+
+    request = Rack::MockRequest.new(app)
+
+    mcp_request = {
+      jsonrpc: "2.0",
+      method: "ping",
+      params: {},
+      id: 4
+    }.to_json
+
+    response = request.post("/",
+      :input => mcp_request,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 500, response.status
+    body = JSON.parse(response.body)
+    assert_match(/Transport error occurred/, body["error"])
+  end
+
+  def test_transport_body_response_types
+    nil_body_transport = Class.new do
+      def initialize(server)
+        @server = server
+      end
+
+      def handle_request(request)
+        [200, {"Content-Type" => "application/json"}, nil]
+      end
+    end
+
+    McpServer.configure do |config|
+      config.transport = nil_body_transport
+    end
+
+    request = Rack::MockRequest.new(app)
+    response = request.post("/", input: '{"jsonrpc":"2.0","method":"ping","id":5}')
+
+    assert_equal 200, response.status
+    assert_equal "", response.body
+
+    string_body_transport = Class.new do
+      def initialize(server)
+        @server = server
+      end
+
+      def handle_request(request)
+        [200, {"Content-Type" => "application/json"}, '{"result":"string body"}']
+      end
+    end
+
+    McpServer.configure do |config|
+      config.transport = string_body_transport
+    end
+
+    response = request.post("/", input: '{"jsonrpc":"2.0","method":"ping","id":6}')
+    assert_equal 200, response.status
+    assert_equal '{"result":"string body"}', response.body
+
+    array_body_transport = Class.new do
+      def initialize(server)
+        @server = server
+      end
+
+      def handle_request(request)
+        [200, {"Content-Type" => "application/json"}, ['{"part1":"a"}', nil, '{"part2":"b"}']]
+      end
+    end
+
+    McpServer.configure do |config|
+      config.transport = array_body_transport
+    end
+
+    response = request.post("/", input: '{"jsonrpc":"2.0","method":"ping","id":7}')
+    assert_equal 200, response.status
+    assert_equal '{"part1":"a"}{"part2":"b"}', response.body
+
+    object_body_transport = Class.new do
+      def initialize(server)
+        @server = server
+      end
+
+      def handle_request(request)
+        [200, {"Content-Type" => "application/json"}, {result: "object body"}]
+      end
+    end
+
+    McpServer.configure do |config|
+      config.transport = object_body_transport
+    end
+
+    response = request.post("/", input: '{"jsonrpc":"2.0","method":"ping","id":8}')
+    assert_equal 200, response.status
+    assert_equal '{:result=>"object body"}', response.body
+  end
+
+  def test_legacy_mcp_server_compatibility
+    legacy_transport = Class.new do
+      def initialize(server)
+        @server = server
+      end
+
+    end
+
+    McpServer.configure do |config|
+      config.transport = legacy_transport
+    end
+
+    request = Rack::MockRequest.new(app)
+
+    mcp_request = {
+      jsonrpc: "2.0",
+      method: "ping",
+      params: {},
+      id: 9
+    }.to_json
+
+    response = request.post("/",
+      :input => mcp_request,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 200, response.status
+
+    body_string = JSON.parse(response.body)
+    body = JSON.parse(body_string)
+
+    assert_equal "2.0", body["jsonrpc"]
+    assert_equal 9, body["id"]
+    assert_equal({}, body["result"])
+  end
+
+  def test_response_handler_returns_nil
+    McpServer.configure do |config|
+      config.response_handler = lambda { |response, request|
+      }
+    end
+
+    request = Rack::MockRequest.new(app)
+
+    mcp_request = {
+      jsonrpc: "2.0",
+      method: "ping",
+      params: {},
+      id: 10
+    }.to_json
+
+    response = request.post("/",
+      :input => mcp_request,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 200, response.status
+    body = JSON.parse(response.body)
+    assert_equal "2.0", body["jsonrpc"]
+    assert_equal 10, body["id"]
+  end
+
+  def test_build_context_with_non_hash_return
+    context_received = nil
+
+    test_tool_class = Class.new(MCP::Tool) do
+      tool_name "context_check"
+      description "Check context contents"
+
+      define_singleton_method(:call) do |server_context:|
+        context_received = server_context
+        MCP::Tool::Response.new(
+          content: [MCP::Content.text("Context checked")]
+        )
+      end
+    end
+
+    McpServer.configure do |config|
+      config.build_context_with = lambda { |request|
+        "not a hash"
+      }
+      config.tools = -> { [test_tool_class] }
+    end
+
+    request = Rack::MockRequest.new(app)
+
+    tool_call = {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "context_check",
+        arguments: {}
+      },
+      id: 11
+    }.to_json
+
+    response = request.post("/",
+      :input => tool_call,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 200, response.status
+    assert context_received[:request]
+    assert_equal 1, context_received.keys.length
+  end
+
+  def test_request_body_rewind
+    rewindable_body = StringIO.new('{"jsonrpc":"2.0","method":"ping","id":12}')
+    rewind_count = 0
+
+    rewindable_body.define_singleton_method(:rewind) do
+      rewind_count += 1
+      seek(0)
+    end
+
+    legacy_transport = Class.new do
+      def initialize(server)
+        @server = server
+      end
+    end
+
+    McpServer.configure do |config|
+      config.transport = legacy_transport
+    end
+
+    env = {
+      "REQUEST_METHOD" => "POST",
+      "PATH_INFO" => "/",
+      "rack.input" => rewindable_body,
+      "CONTENT_TYPE" => "application/json"
+    }
+
+    response = app.call(env)
+
+    assert_equal 200, response[0]
+    assert_equal 1, rewind_count, "Body should be rewound once"
+  end
+
+  def test_no_transport_configured
+    McpServer.configure do |config|
+      config.transport = nil
+    end
+
+    request = Rack::MockRequest.new(app)
+
+    mcp_request = {
+      jsonrpc: "2.0",
+      method: "ping",
+      params: {},
+      id: 13
+    }.to_json
+
+    response = request.post("/",
+      :input => mcp_request,
+      "CONTENT_TYPE" => "application/json")
+
+    assert_equal 500, response.status
+    body = JSON.parse(response.body)
+    assert_equal "Internal server error", body["error"]
   end
 end
